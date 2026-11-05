@@ -59,11 +59,24 @@ COPY --chmod=0755 apps/home-assistant-matter-hub/addon.docker-entrypoint.sh \
 ENV NODE_ENV=production
 ARG PACKAGE_VERSION=unknown
 ARG VCS_REF=unknown
+ARG CREATED=unknown
+# Every label the base image sets that would misdescribe this image is
+# overridden here.
 LABEL \
+  io.hass.name="Home Assistant Matter Hub (household fork)" \
+  io.hass.description="Exposes selected Home Assistant entities to Matter controllers" \
   io.hass.version="${PACKAGE_VERSION}" \
   io.hass.type="addon" \
   io.hass.arch="aarch64" \
+  io.hass.url="https://github.com/AirDoogle/home-assistant-matter-hub" \
+  maintainer="AirDoogle" \
   org.opencontainers.image.title="Home Assistant Matter Hub (household fork)" \
+  org.opencontainers.image.description="Home Assistant add-on: exposes selected entities to Matter controllers. Built from the commit in org.opencontainers.image.revision." \
+  org.opencontainers.image.created="${CREATED}" \
+  org.opencontainers.image.url="https://github.com/AirDoogle/home-assistant-matter-hub" \
+  org.opencontainers.image.documentation="https://github.com/AirDoogle/home-assistant-matter-hub/blob/douglas/FORK.md" \
+  org.opencontainers.image.vendor="AirDoogle" \
+  org.opencontainers.image.authors="AirDoogle" \
   org.opencontainers.image.source="https://github.com/AirDoogle/home-assistant-matter-hub" \
   org.opencontainers.image.revision="${VCS_REF}" \
   org.opencontainers.image.version="${PACKAGE_VERSION}" \
