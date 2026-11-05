@@ -7,6 +7,7 @@ import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 
 import start from "./commands/start/start-command.js";
+import { logUnhandledRejections } from "./core/app/unhandled-rejections.js";
 
 const dirname =
   import.meta.dirname ?? url.fileURLToPath(new URL(".", import.meta.url));
@@ -31,4 +32,5 @@ export async function cli(argv: string[]): Promise<void> {
     .parse();
 }
 
+logUnhandledRejections();
 await cli(process.argv);

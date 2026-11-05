@@ -11,6 +11,12 @@ export default function startCommand(
     command: "start",
     describe: "start the application",
     builder: startOptionsBuilder,
-    handler: (args) => startHandler(args, webDist),
+    // Start-up failures end the process (the add-on watchdog restarts it).
+    // Said explicitly, since unhandled rejections are only logged (cli.ts).
+    handler: (args) =>
+      startHandler(args, webDist).catch((error: unknown) => {
+        console.error("Failed to start:", error);
+        process.exit(1);
+      }),
   };
 }
