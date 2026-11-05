@@ -3,6 +3,7 @@ import {
   type UpdateBridgeRequest,
 } from "@home-assistant-matter-hub/common";
 import type { Environment, Logger } from "@matter/general";
+import { SessionManager } from "@matter/main/protocol";
 import type { LoggerService } from "../../core/app/logger.js";
 import { BridgeServerNode } from "../../matter/endpoints/bridge-server-node.js";
 import type {
@@ -10,10 +11,12 @@ import type {
   BridgeServerStatus,
 } from "./bridge-data-provider.js";
 import type { BridgeEndpointManager } from "./bridge-endpoint-manager.js";
+import { closeReplacedSessions } from "./close-replaced-sessions.js";
 
 export class Bridge {
   private readonly log: Logger;
   readonly server: BridgeServerNode;
+  private stopClosingReplacedSessions?: () => void;
 
   private status: BridgeServerStatus = {
     code: BridgeStatus.Stopped,
@@ -74,6 +77,11 @@ export class Bridge {
       await this.refreshDevices();
       this.endpointManager.startObserving();
       await this.server.start();
+      this.stopClosingReplacedSessions?.();
+      this.stopClosingReplacedSessions = closeReplacedSessions(
+        this.server.env.get(SessionManager),
+        this.log,
+      );
       this.status = { code: BridgeStatus.Running };
     } catch (e) {
       const reason = "Failed to start bridge due to error:";
@@ -86,6 +94,8 @@ export class Bridge {
     code: BridgeStatus = BridgeStatus.Stopped,
     reason = "Manually stopped",
   ) {
+    this.stopClosingReplacedSessions?.();
+    this.stopClosingReplacedSessions = undefined;
     this.endpointManager.stopObserving();
     await this.server.cancel();
     this.status = { code, reason };
