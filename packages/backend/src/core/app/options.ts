@@ -70,8 +70,11 @@ export class Options {
         productId: 0x8000,
         productName: "MatterHub",
         productLabel: "Home Assistant Matter Hub",
-        hardwareVersion: new Date().getFullYear(),
-        softwareVersion: new Date().getFullYear(),
+        // Fixed, so the identity data a controller sees does not change
+        // every 1 January. 2026 is what bridges reported when this fork
+        // was made.
+        hardwareVersion: 2026,
+        softwareVersion: 2026,
       },
     };
   }

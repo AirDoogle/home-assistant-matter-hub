@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Options, type OptionsProps } from "./options.js";
 
 function options(props: Partial<OptionsProps>) {
@@ -18,5 +18,17 @@ describe("Options.webApi.host", () => {
     expect(options({ httpHost: "172.30.32.1" }).webApi.host).toEqual(
       "172.30.32.1",
     );
+  });
+});
+
+describe("Options.bridgeService.basicInformation", () => {
+  it("should report fixed hardware and software versions", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2031-01-01T00:00:00Z"));
+    const { hardwareVersion, softwareVersion } =
+      options({}).bridgeService.basicInformation;
+    vi.useRealTimers();
+    expect(hardwareVersion).toEqual(2026);
+    expect(softwareVersion).toEqual(2026);
   });
 });
