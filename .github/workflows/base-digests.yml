@@ -1,0 +1,62 @@
+name: Base image digests
+
+# Run by hand when updating the pinned base images (see FORK.md). It only
+# reads public registry metadata and prints, for each reference, the
+# linux/arm64 manifest digest to pin in addon.Dockerfile and image.yml.
+on:
+  workflow_dispatch:
+    inputs:
+      refs:
+        description: Space-separated image references to resolve
+        required: true
+        default: >-
+          node:22-alpine
+          node:22-alpine3.24
+          node:22-alpine3.23
+          ghcr.io/hassio-addons/base:21.0.10
+          moby/buildkit:v0.34.2
+          docker/buildkit-syft-scanner:1.12.1
+
+permissions: {}
+
+jobs:
+  digests:
+    runs-on: ubuntu-24.04-arm
+    permissions: {}
+    steps:
+      - name: Resolve linux/arm64 digests
+        env:
+          REFS: ${{ inputs.refs }}
+        run: |
+          {
+            echo "| Reference | linux/arm64 digest | Notes |"
+            echo "|---|---|---|"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for ref in $REFS; do
+            raw=$(docker buildx imagetools inspect --raw "$ref" 2>&1) || {
+              echo "| \`$ref\` | not found | |" >> "$GITHUB_STEP_SUMMARY"
+              continue
+            }
+            digest=$(echo "$raw" | jq -r '
+              if .manifests then
+                (.manifests[] | select(.platform.os == "linux"
+                  and .platform.architecture == "arm64"
+                  and (.platform.variant // "v8") == "v8") | .digest)
+              else empty end' | head -n1)
+            if [ -z "$digest" ]; then
+              digest=$(docker buildx imagetools inspect "$ref" \
+                --format '{{.Manifest.Digest}}')
+            fi
+            config=$(docker buildx imagetools inspect "$ref" \
+              --format '{{json .Image}}' 2>/dev/null || true)
+            notes=$(echo "$config" | jq -r '
+              (if has("linux/arm64") then .["linux/arm64"] else . end)
+              | [(.config.Env // [] | map(select(startswith("NODE_VERSION")
+                  or startswith("YARN"))) | .[]),
+                 (.config.Labels // {} | to_entries
+                  | map(select(.key | test("alpine|version"; "i")))
+                  | map("\(.key)=\(.value)") | .[])]
+              | join(", ")' 2>/dev/null || true)
+            echo "$ref -> $digest ($notes)"
+            echo "| \`$ref\` | \`$digest\` | $notes |" >> "$GITHUB_STEP_SUMMARY"
+          done
