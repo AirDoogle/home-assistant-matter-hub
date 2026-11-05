@@ -85,8 +85,12 @@ export class WebApi extends Service {
   }
 
   override async dispose() {
+    const server = this.server;
+    if (!server) {
+      return;
+    }
     await new Promise<void>((resolve, reject) => {
-      this.server?.close((error) => {
+      server.close((error) => {
         if (error) {
           reject(error);
         } else {
@@ -100,8 +104,14 @@ export class WebApi extends Service {
     if (this.server) {
       return;
     }
-    this.server = await new Promise((resolve) => {
-      const server = this.app.listen(this.props.port, this.props.host, () => {
+    this.server = await new Promise((resolve, reject) => {
+      // Express 5 passes listen errors (EADDRINUSE, EADDRNOTAVAIL) to this
+      // callback; reject instead of reporting that the server is listening.
+      const server = this.app.listen(this.props.port, this.props.host, (e) => {
+        if (e) {
+          reject(e);
+          return;
+        }
         this.log.info(
           `HTTP server (API ${this.props.webUiDist ? "& Web App" : "only"}) listening on ${this.props.host} port ${this.props.port}`,
         );

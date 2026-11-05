@@ -39,6 +39,13 @@ describe("WebApi", () => {
     expect(address.address).toEqual("127.0.0.1");
   });
 
+  it("should fail to start when the port is taken", async () => {
+    const { address } = await startWebApi();
+    await expect(startWebApi({}, { port: address.port })).rejects.toThrow(
+      /EADDRINUSE/,
+    );
+  });
+
   it("should keep serving after a request with a malformed URL", async () => {
     const { url } = await startWebApi();
     const malformed = await fetch(`${url}/%ff`);
