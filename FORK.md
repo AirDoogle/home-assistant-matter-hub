@@ -92,7 +92,11 @@ an entity the bridge no longer exposes.
   `input_boolean` now call their own services instead of the generic
   `homeassistant.turn_on/off`; `input_boolean` has its own small endpoint
   (`matter/endpoints/legacy/input-boolean/`).
-- **Factory reset is POST**, not GET (and the one frontend call with it).
+- **Factory reset is POST with a JSON body**, not GET (and the one frontend
+  call with it), so a browser will not send it cross-site without a CORS
+  preflight, which this API never answers.
+- **Action strings** that are not exactly `domain.service` are refused
+  before the allow-list check.
 - **HTTP hardening:** `X-Content-Type-Options: nosniff` on every response,
   no `X-Powered-By`, a 64 KB JSON body limit, the `X-Ingress-Path` value
   HTML-escaped (and inserted without `$` expansion) in the page's
@@ -106,8 +110,15 @@ an entity the bridge no longer exposes.
   user's, mode 0700, before dropping privileges.
 - **Dependencies:** express 5.2.1 → 5.3.0, which brings body-parser 2.4.0
   (GHSA-27r3-jxmh-p828, a process-ending crash from a compressed body;
-  reachable through ingress) and, as a side effect, proxy-addr 2.0.8 and qs
-  6.17.1. `rxjs` and `strip-color`, never imported, are removed.
+  reachable through ingress). Re-resolving express also moved proxy-addr
+  2.0.7 → 2.0.8, qs 6.14.0 → 6.17.1, content-disposition 1.0.1 → 2.0.1
+  and content-type 1.0.5 → 2.1.0 (both majors, as express 5.3.0 requires),
+  type-is 2.0.1 → 2.1.0, iconv-lite 0.7.0 → 0.7.3, side-channel 1.1.0 →
+  1.1.1 and side-channel-list 1.0.0 → 1.0.1; the regeneration also added a
+  `deprecated` note to the dev-only `@ungap/structured-clone`. `rxjs` and
+  `strip-color` (and `@types/strip-color`), never imported, are removed.
+  In the frontend, react-router 7.13.0 → 7.18.5 (see "Frontend
+  advisories" below). pnpm itself is pinned by sha512 in `packageManager`.
 
 ### Reliability
 
@@ -125,6 +136,17 @@ an entity the bridge no longer exposes.
     watchdog restarts the add-on;
   - a taken port, which Express 5 hands to the listen callback; start-up now
     fails instead of claiming to listen.
+
+  home-assistant-js-websocket also leaves rejections unhandled inside the
+  library (a collection's unsubscribe at teardown, the resubscribe after a
+  reconnect, the initial subscribe), where no call site can catch them, so
+  `cli.ts` installs a process `unhandledRejection` listener that logs each
+  one at error level and keeps running. Uncaught exceptions are not caught,
+  and a failed start-up still exits 1 (the start command and `Service` both
+  exit explicitly).
+- **OFF to a momentary device does nothing.** Upstream scheduled a reset
+  that registered a new matter.js reactor on every OFF, which was never
+  removed.
 - **matter.js 0.16.7 → 0.16.11**, the last 0.16 patch (session and
   subscription fixes; it does not close a peer's older CASE sessions).
 - **Replaced CASE sessions are closed** once silent
@@ -187,9 +209,27 @@ an entity the bridge no longer exposes.
   larger feature set (plugins, backup and restore, the WebSocket API, update
   checks, device images). None of those exist here.
 - **The other domains' code** stays in the tree, unreachable (see above).
-- **Other dependency advisories** in the lockfile (path-to-regexp, ws,
-  fast-uri, ajv, lodash-es) are not reachable here (static routes, Node's own
-  WebSocket, no `$data`, no `_.template`) and are left for a later pass.
+- **Other dependency advisories** in the backend's runtime set
+  (path-to-regexp, ws, fast-uri, ajv, lodash-es) are not reachable here
+  (static routes, Node's own WebSocket, no `$data`, no `_.template`) and are
+  left for a later pass.
+- **Frontend advisories.** The frontend is bundled by vite and served only
+  to logged-in Home Assistant users through ingress; it is not in the image
+  SBOM, which sees `node_modules` only. An OSV query of its locked runtime
+  set (345 packages) found, besides react-router (bumped):
+  - `markdown-it` 14.1.0, `linkify-it` 5.0.0 (ReDoS and quadratic-time
+    parsing), `mdast-util-to-hast` 13.2.0, `deepmerge`, `fast-copy`, `yaml`
+    2.7.1: pulled in by `codemirror-json-schema` for the JSON editor, which
+    renders this app's own schema descriptions and the user's own edits. At
+    most the user can slow their own tab. Not reachable by anyone else.
+  - `ajv` 8.17.1 (`$data` ReDoS), `fast-uri`, `lodash`/`lodash-es`
+    (`_.template`, `_.unset`/`_.omit` paths): through `@rjsf/*` form
+    validation of this app's own schemas against the user's own input. No
+    third-party input reaches them.
+  - `yaml` 1.10.2: via `@emotion/react`'s build-time macro tooling, not in
+    the bundle.
+  `react-markdown`, `remark-gfm`, `rehype-github-alerts`, `lodash` and
+  `clipboardy` are declared but imported nowhere, so they are not bundled.
 - **Not fixed, noted:** `bridge-registry.ts` looks a device up by entity id,
   so device labels and device areas are never consulted (it fails closed);
   `DebounceContext.unregisterAll()` iterates the wrong object and clears
@@ -231,36 +271,60 @@ default: make it public, or add ghcr credentials in the Supervisor.
 The image workflow runs after CI passes on a push to `douglas` (and by
 hand), on a native arm64 runner, for linux/arm64 only:
 
-1. A build stage on `node:22-alpine3.24` (pinned by digest) runs
-   `pnpm fetch` (the only download, checked against the lockfile's
-   integrity hashes), then `pnpm install --frozen-lockfile --offline
-   --ignore-scripts`, then the package builds.
+The workflow builds only when this repository's own `ci.yml` passed on a
+push to `douglas` (or on a manual run on `douglas`), and only when
+`GITHUB_SHA`, the commit the attestation names, is the commit CI passed
+on.
+
+1. A build stage on `node:22-alpine3.24` (pinned by digest) downloads only
+   twice: corepack fetches pnpm (pinned by sha512 in `packageManager`), and
+   `pnpm fetch` fetches what the lockfile names (checked against its
+   integrity hashes). Everything after that runs with `--network=none`:
+   `pnpm install --frozen-lockfile --offline --ignore-scripts`, then the
+   package builds.
 2. A prod stage installs the app's production dependencies alone from the
    same lockfile and store (`--prod --filter home-assistant-matter-hub`,
-   offline, no scripts).
+   offline, no scripts, no network).
 3. The runtime is `ghcr.io/hassio-addons/base:21.0.10` (pinned by digest)
-   with the node binary only: no npm, npx, corepack, pnpm or yarn.
-4. The image is built once and smoke-tested (no package managers, the
+   with the node binary, and the libstdc++ and libgcc_s it needs, copied
+   from the pinned node image; nothing is fetched with apk. There are no
+   JavaScript package managers (npm, npx, corepack, pnpm, yarn); the base's
+   own `apk`, `curl`, `bash` and `jq` remain, and only root (before the
+   privilege drop) can use `apk`.
+4. The tag `<version>-dw.<sha7>` must not exist yet: the job fails if it
+   does, so a tag is never moved to a new digest.
+5. The image is built once and smoke-tested (no package managers, the
    `hamh` user exists, the bundle loads all its dependencies as that user),
    then pushed as
    `ghcr.io/airdoogle/home-assistant-matter-hub-addon:<version>-dw.<sha7>`
-   (never `latest`, never re-pushed) with BuildKit provenance (`mode=max`),
-   an SBOM, and a GitHub artifact attestation. The BuildKit builder and the
-   SBOM scanner images are pinned by digest too. The job summary prints the
-   digest.
+   (never `latest`) with BuildKit provenance (`mode=max`), an SBOM, and a
+   GitHub artifact attestation. The BuildKit builder and the SBOM scanner
+   images are pinned by digest too. The labels describe this image (the
+   base's labels are overridden), and `created` is the commit's date. The
+   job summary prints the digest and the check below.
 
-To check an image against a commit before putting its tag in the add-on:
+To check an image before putting its tag in the add-on, first review the
+commit in your own clone, then verify the image **by digest** against that
+exact commit:
 
 ```sh
 gh attestation verify \
   oci://ghcr.io/airdoogle/home-assistant-matter-hub-addon@sha256:<digest> \
-  --owner AirDoogle
+  --repo AirDoogle/home-assistant-matter-hub \
+  --signer-workflow AirDoogle/home-assistant-matter-hub/.github/workflows/image.yml \
+  --source-ref refs/heads/douglas \
+  --source-digest <commit you reviewed> \
+  --deny-self-hosted-runners
 docker buildx imagetools inspect \
-  ghcr.io/airdoogle/home-assistant-matter-hub-addon:<tag>
+  ghcr.io/airdoogle/home-assistant-matter-hub-addon@sha256:<digest>
 ```
 
-The attestation names the workflow, the `douglas` ref and the commit; the
-image's `org.opencontainers.image.revision` label is the same commit.
+`--owner` alone is not enough: it accepts an attestation from any workflow,
+ref or repository of the account. Check also that the image's
+`org.opencontainers.image.revision` label is the same commit. The
+attestation proves which workflow built which commit, not who wrote the
+commit: the reviewed commit and the reviewed version bump in the add-on
+repository are the real gate.
 
 ## Update procedure
 
@@ -277,4 +341,8 @@ image's `org.opencontainers.image.revision` label is the same commit.
 4. Push to `douglas`; wait for CI and then the image workflow to pass.
 5. Verify the new image as above, then bump `version` in the add-on
    repository's `config.yaml` to the new tag in a reviewed commit, recording
-   the digest in the commit message.
+   the digest in the commit message. After an install or a restore, compare
+   the running image's digest on the Home Assistant host with the recorded
+   one.
+6. For the frontend, re-run an OSV query of `packages/frontend`'s locked
+   runtime set; the image SBOM does not cover it.
