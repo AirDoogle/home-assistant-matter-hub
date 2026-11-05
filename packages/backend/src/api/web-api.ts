@@ -46,23 +46,12 @@ export class WebApi extends Service {
       .use(nocache())
       .use("/matter", matterApi(this.bridgeService));
 
-    const middlewares: express.Handler[] = [
-      this.accessLogger,
-      noSniff,
-      supportIngress,
-      supportProxyLocation,
-    ];
+    // The IP allow-list goes first: with host networking the bind address is
+    // the host's own address, so the allow-list, not the bind, is the
+    // boundary. Nothing else (logging, proxy-header handling, auth, body
+    // parsing, static files) runs for a client it refuses.
+    const middlewares: express.Handler[] = [noSniff];
 
-    if (this.props.auth) {
-      middlewares.push(
-        basicAuth({
-          users: { [this.props.auth.username]: this.props.auth.password },
-          challenge: true,
-          realm: "Home Assistant Matter Hub",
-        }),
-      );
-      this.log.info("Basic authentication enabled");
-    }
     if (this.props.whitelist && this.props.whitelist.length > 0) {
       middlewares.push(
         AccessControl({
@@ -76,6 +65,17 @@ export class WebApi extends Service {
         }),
       );
     }
+    if (this.props.auth) {
+      middlewares.push(
+        basicAuth({
+          users: { [this.props.auth.username]: this.props.auth.password },
+          challenge: true,
+          realm: "Home Assistant Matter Hub",
+        }),
+      );
+      this.log.info("Basic authentication enabled");
+    }
+    middlewares.push(this.accessLogger, supportIngress, supportProxyLocation);
 
     this.app = express()
       .disable("x-powered-by")

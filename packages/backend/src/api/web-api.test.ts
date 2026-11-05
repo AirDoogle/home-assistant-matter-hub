@@ -39,6 +39,27 @@ describe("WebApi", () => {
     expect(address.address).toEqual("127.0.0.1");
   });
 
+  it("should refuse a client off the allow-list first", async () => {
+    const create = vi.fn();
+    const { url } = await startWebApi({ create } as Partial<BridgeService>, {
+      whitelist: ["192.0.2.1"],
+    });
+    // Each of these would be answered differently if the proxy-header
+    // handling, the body parser or the router ran first.
+    const mismatch = await fetch(`${url}/x`, {
+      headers: { "X-Forwarded-Prefix": "/elsewhere" },
+    });
+    expect(mismatch.status).toEqual(401);
+    const malformed = await fetch(`${url}/api/matter/bridges`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{",
+    });
+    expect(malformed.status).toEqual(401);
+    expect(create).not.toHaveBeenCalled();
+    expect(mismatch.headers.get("x-content-type-options")).toEqual("nosniff");
+  });
+
   it("should fail to start when the port is taken", async () => {
     const { address } = await startWebApi();
     await expect(startWebApi({}, { port: address.port })).rejects.toThrow(

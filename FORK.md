@@ -79,6 +79,12 @@ an entity the bridge no longer exposes.
   listens on that address only and defaults to `127.0.0.1`. The add-on
   passes `172.30.32.1`, where the Supervisor's ingress proxy reaches a
   host-network add-on, and keeps the `172.30.32.2` IP allow-list.
+- **The IP allow-list is the boundary, and it runs first.** With host
+  networking, 172.30.32.1 is the host's own address, which the host also
+  accepts from other interfaces and from other add-ons, so the bind alone
+  is not a boundary. The allow-list (then basic auth, if configured) now
+  runs before the access logger, the proxy-header handling, body parsing
+  and the static files, so none of them sees a refused client.
 - **A malformed URL could kill the process.** The access logger's
   `decodeURI("/%ff")` threw in a `finish` listener: an uncaught exception
   from one request, before the allow-list. It now falls back to the raw URL.
