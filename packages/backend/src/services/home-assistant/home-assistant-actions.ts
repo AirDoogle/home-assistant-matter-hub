@@ -5,6 +5,7 @@ import type { LoggerService } from "../../core/app/logger.js";
 import { Service } from "../../core/ioc/service.js";
 import { DebounceContext } from "../../utils/debounce-context.js";
 import type { HomeAssistantClient } from "./home-assistant-client.js";
+import { isAllowedAction } from "./household-allow-list.js";
 
 export interface HomeAssistantAction {
   action: string;
@@ -48,7 +49,13 @@ export class HomeAssistantActions extends Service {
     data: object | undefined,
     target: HassServiceTarget,
     returnResponse?: boolean,
-  ): Promise<T> {
+  ): Promise<T | undefined> {
+    if (!isAllowedAction(`${domain}.${action}`, target)) {
+      this.log.warn(
+        `Refused action '${domain}.${action}' for target ${JSON.stringify(target)}: not on this fork's allow-list`,
+      );
+      return undefined;
+    }
     this.log.debug(
       `Calling action '${domain}.${action}' for target ${JSON.stringify(target)} with data ${JSON.stringify(data ?? {})}`,
     );
