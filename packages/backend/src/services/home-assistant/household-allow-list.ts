@@ -36,12 +36,17 @@ const allowedActions: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ["input_button.press", new Set(["input_button"])],
 ]);
 
-export function domainOf(entityId: string): string {
-  return entityId.split(".")[0];
+/**
+ * The domain of a well-formed entity id ("light.kitchen" -> "light"), or
+ * undefined for anything that is not one.
+ */
+export function domainOf(entityId: string): string | undefined {
+  return /^([a-z0-9_]+)\.[a-z0-9_]+$/.exec(entityId)?.[1];
 }
 
 export function isAllowedDomain(entityId: string): boolean {
-  return allowedDomains.has(domainOf(entityId));
+  const domain = domainOf(entityId);
+  return domain !== undefined && allowedDomains.has(domain);
 }
 
 /**
@@ -64,6 +69,9 @@ export function isAllowedAction(
   const entityIds = entity_id == null ? [] : [entity_id].flat();
   return (
     entityIds.length > 0 &&
-    entityIds.every((entityId) => domains.has(domainOf(entityId)))
+    entityIds.every((entityId) => {
+      const domain = domainOf(entityId);
+      return domain !== undefined && domains.has(domain);
+    })
   );
 }

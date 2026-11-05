@@ -24,6 +24,10 @@ describe("isAllowedDomain", () => {
     "alarm_control_panel.home",
     "shell_command.anything",
     "light",
+    "light.",
+    ".kitchen",
+    "light.kitchen.extra",
+    "Light.Kitchen",
     "",
   ])("should refuse %s", (entityId) => {
     expect(isAllowedDomain(entityId)).toBe(false);
@@ -63,6 +67,9 @@ describe("isAllowedAction", () => {
     ["light.turn_on", "switch.lamp"],
     ["script.turn_on", "automation.goodnight"],
     ["automation.trigger", "script.movie_mode"],
+    // malformed entity ids
+    ["light.turn_on", "light"],
+    ["light.turn_on", "light.kitchen,lock.front_door"],
   ])("should refuse %s on %s", (action, entityId) => {
     expect(isAllowedAction(action, { entity_id: entityId })).toBe(false);
   });
