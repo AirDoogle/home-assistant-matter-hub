@@ -55,7 +55,9 @@ class OnOffServerBase extends FeaturedBase {
   override off() {
     const { turnOff } = this.state.config;
     if (turnOff === null) {
-      setTimeout(this.callback(this.autoReset), 1000);
+      // Nothing to do: these devices never set onOff themselves. Upstream
+      // scheduled a reset through this.callback, which registers a new
+      // reactor on every call and so grew with every OFF command.
       return;
     }
     const homeAssistant = this.agent.get(HomeAssistantEntityBehavior);
