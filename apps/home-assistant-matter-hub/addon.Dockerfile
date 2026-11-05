@@ -13,21 +13,22 @@ FROM ${NODE_IMAGE} AS build
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0 CI=true
 WORKDIR /src
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
-# pnpm at the version in package.json "packageManager", through corepack.
+# The only two steps with network access. Corepack downloads pnpm at the
+# version and sha512 in package.json "packageManager"; "pnpm fetch" downloads
+# everything the lockfile names, checked against its integrity hashes.
 RUN corepack enable && pnpm --version
-# The only step that downloads packages: everything the lockfile names,
-# checked against its integrity hashes, into the store.
 RUN pnpm fetch
 COPY . .
-RUN pnpm install --frozen-lockfile --offline --ignore-scripts
-RUN pnpm --filter './packages/*' --filter './apps/*' run build
+# From here on, no network at all.
+RUN --network=none pnpm install --frozen-lockfile --offline --ignore-scripts
+RUN --network=none pnpm --filter './packages/*' --filter './apps/*' run build
 
 # Production dependencies of the app alone, from the same lockfile and
 # store, with no network and no install scripts. The workspace packages
 # are dev dependencies of the app: their code is already in its dist.
 FROM build AS prod
 WORKDIR /prod
-RUN cp /src/package.json /src/pnpm-lock.yaml /src/pnpm-workspace.yaml \
+RUN --network=none cp /src/package.json /src/pnpm-lock.yaml /src/pnpm-workspace.yaml \
       /src/.npmrc ./ \
  && for p in apps/home-assistant-matter-hub packages/backend packages/common \
       packages/frontend docs; do \
@@ -37,11 +38,13 @@ RUN cp /src/package.json /src/pnpm-lock.yaml /src/pnpm-workspace.yaml \
       --filter home-assistant-matter-hub
 
 # Runtime: the Home Assistant add-on base (s6-overlay, bashio) plus the node
-# binary only, so no npm, npx, corepack or pnpm.
+# binary only, so no npm, npx, corepack or pnpm. The two C++ runtime
+# libraries node needs come from the same pinned node image (Alpine 3.24,
+# like the base) instead of an unpinned "apk add".
 FROM ${BASE_IMAGE}
-RUN apk add --no-cache libstdc++ \
- && addgroup -S hamh \
+RUN --network=none addgroup -S hamh \
  && adduser -S -D -H -h /var/empty -s /sbin/nologin -G hamh hamh
+COPY --from=build /usr/lib/libstdc++.so.6* /usr/lib/libgcc_s.so.1 /usr/lib/
 COPY --from=build /usr/local/bin/node /usr/local/bin/node
 COPY --from=prod /prod/node_modules /app/node_modules
 COPY --from=prod /prod/apps/home-assistant-matter-hub/node_modules \
