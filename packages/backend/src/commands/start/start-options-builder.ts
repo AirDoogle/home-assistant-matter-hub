@@ -39,6 +39,11 @@ export function startOptionsBuilder(yargs: Argv): Argv<StartOptions> {
         "Port used by the web application. 'http-port' is recommended, 'web-port' is deprecated and will be removed in the future.",
       default: 8482,
     })
+    .option("http-host", {
+      type: "string",
+      description:
+        "Address the web server binds to. Defaults to 127.0.0.1, so the web UI and API are reachable from this machine only unless an address is given.",
+    })
     .option("http-ip-whitelist", {
       type: "array",
       description:

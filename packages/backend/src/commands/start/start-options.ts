@@ -1,6 +1,7 @@
 export interface StartOptions {
   "log-level": string;
   "http-port": number;
+  "http-host": string | undefined;
   "http-ip-whitelist": (string | number)[] | undefined;
   "disable-log-colors": boolean;
   "storage-location": string | undefined;

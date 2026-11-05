@@ -53,6 +53,7 @@ export class Options {
         : undefined;
     return {
       port: this.startOptions.httpPort,
+      host: notEmpty(this.startOptions.httpHost) ?? "127.0.0.1",
       whitelist: this.startOptions.httpIpWhitelist?.map((item) =>
         item.toString(),
       ),
