@@ -67,6 +67,12 @@ export function matterApi(bridgeService: BridgeService): express.Router {
   });
 
   router.post("/bridges/:bridgeId/actions/factory-reset", async (req, res) => {
+    // A JSON body makes this a non-simple request, which a browser will not
+    // send cross-site without a CORS preflight that this API never answers.
+    if (!req.is("application/json")) {
+      res.status(415).send("Unsupported Media Type");
+      return;
+    }
     const bridgeId = req.params.bridgeId;
     const bridge = bridgeService.bridges.find((b) => b.id === bridgeId);
     if (bridge) {

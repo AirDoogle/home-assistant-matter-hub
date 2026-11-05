@@ -134,12 +134,32 @@ describe("WebApi", () => {
       expect(bridge.factoryReset).not.toHaveBeenCalled();
     });
 
+    it("should not reset a bridge on a POST without JSON", async () => {
+      const { bridge, bridgeService } = fakeBridgeService();
+      const { url } = await startWebApi(
+        bridgeService as unknown as Partial<BridgeService>,
+      );
+      const plain = await fetch(`${url}${path}`, { method: "POST" });
+      expect(plain.status).toEqual(415);
+      const form = await fetch(`${url}${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain" },
+        body: "{}",
+      });
+      expect(form.status).toEqual(415);
+      expect(bridge.factoryReset).not.toHaveBeenCalled();
+    });
+
     it("should reset a bridge on POST", async () => {
       const { bridge, bridgeService } = fakeBridgeService();
       const { url } = await startWebApi(
         bridgeService as unknown as Partial<BridgeService>,
       );
-      const res = await fetch(`${url}${path}`, { method: "POST" });
+      const res = await fetch(`${url}${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
       expect(res.status).toEqual(200);
       expect(await res.json()).toEqual({ id: "b1" });
       expect(bridge.factoryReset).toHaveBeenCalledOnce();
