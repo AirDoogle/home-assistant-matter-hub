@@ -16,16 +16,21 @@ concurrency:
 
 env:
   IMAGE: ghcr.io/airdoogle/home-assistant-matter-hub-addon
-  # The commit CI passed on (workflow_run), or the dispatched one.
-  SOURCE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
 
 jobs:
   image:
     name: Build, test and push linux/arm64
+    # Only this repository's own CI workflow, on a push to douglas, that
+    # passed; or a manual run on douglas.
     if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.event == 'push')
+      (github.event_name == 'workflow_dispatch' &&
+       github.ref == 'refs/heads/douglas') ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'douglas' &&
+       github.event.workflow_run.head_repository.full_name == github.repository &&
+       github.event.workflow_run.path == '.github/workflows/ci.yml')
     runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
@@ -33,19 +38,57 @@ jobs:
       id-token: write
       attestations: write
     steps:
+      # The attestation names GITHUB_SHA (for workflow_run, douglas's head
+      # when CI finished, and the commit this workflow file is read from).
+      # Build only when that is the commit CI passed on, so the image, its
+      # labels and its attestation all name one commit.
+      - name: Check the commit
+        if: github.event_name == 'workflow_run'
+        env:
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          if [ "$GITHUB_SHA" != "$HEAD_SHA" ]; then
+            echo "douglas moved on from $HEAD_SHA to $GITHUB_SHA; not building."
+            echo "That commit's own CI run triggers its build."
+            exit 1
+          fi
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ env.SOURCE_SHA }}
           persist-credentials: false
 
       - name: Image tag
         id: meta
         run: |
           version=$(jq -r .version apps/home-assistant-matter-hub/package.json)
-          tag="${version}-dw.${SOURCE_SHA::7}"
+          tag="${version}-dw.${GITHUB_SHA::7}"
           echo "version=${tag}" >> "$GITHUB_OUTPUT"
           echo "ref=${IMAGE}:${tag}" >> "$GITHUB_OUTPUT"
           echo "Image: ${IMAGE}:${tag}"
+
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Tags are immutable: a re-run or a second dispatch for the same commit
+      # must not move an existing tag to a new digest.
+      - name: Refuse an existing tag
+        env:
+          REF: ${{ steps.meta.outputs.ref }}
+        run: |
+          if out=$(docker buildx imagetools inspect "$REF" 2>&1); then
+            echo "$REF already exists; tags are never re-pushed."
+            echo "$out"
+            exit 1
+          fi
+          if ! grep -qi "not found" <<<"$out"; then
+            echo "Could not tell whether $REF exists:"
+            echo "$out"
+            exit 1
+          fi
+          echo "$REF does not exist yet."
 
       # The BuildKit builder is pinned by digest too.
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -65,7 +108,7 @@ jobs:
           tags: hamh-smoke:local
           build-args: |
             PACKAGE_VERSION=${{ steps.meta.outputs.version }}
-            VCS_REF=${{ env.SOURCE_SHA }}
+            VCS_REF=${{ github.sha }}
 
       - name: Smoke test the image
         run: |
@@ -74,6 +117,7 @@ jobs:
           run /usr/local/bin/node --version
           # No package managers in the runtime image.
           run /bin/sh -c '
+            set -eu
             for b in npm npx corepack pnpm yarn; do
               if command -v "$b"; then echo "unexpected: $b"; exit 1; fi
             done
@@ -84,12 +128,6 @@ jobs:
           # The bundle loads all its runtime dependencies, as the add-on user.
           run /command/s6-setuidgid hamh /usr/local/bin/node \
             /app/apps/home-assistant-matter-hub/dist/backend/cli.js start --help
-
-      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
 
       # Same Dockerfile and inputs, so this reuses the cache of the smoke
       # test build and adds provenance and an SBOM.
@@ -106,7 +144,7 @@ jobs:
           tags: ${{ steps.meta.outputs.ref }}
           build-args: |
             PACKAGE_VERSION=${{ steps.meta.outputs.version }}
-            VCS_REF=${{ env.SOURCE_SHA }}
+            VCS_REF=${{ github.sha }}
 
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
@@ -125,9 +163,14 @@ jobs:
             echo "- Image: \`${REF}\`"
             echo "- Digest: \`${DIGEST}\`"
             echo "- Pinned reference: \`${IMAGE}@${DIGEST}\`"
-            echo "- Source commit: \`${SOURCE_SHA}\`"
+            echo "- Source commit: \`${GITHUB_SHA}\`"
             echo
             echo "Verify with:"
             echo
-            echo "    gh attestation verify oci://${IMAGE}@${DIGEST} --owner AirDoogle"
+            echo "    gh attestation verify oci://${IMAGE}@${DIGEST} \\"
+            echo "      --repo AirDoogle/home-assistant-matter-hub \\"
+            echo "      --signer-workflow AirDoogle/home-assistant-matter-hub/.github/workflows/image.yml \\"
+            echo "      --source-ref refs/heads/douglas \\"
+            echo "      --source-digest ${GITHUB_SHA} \\"
+            echo "      --deny-self-hosted-runners"
           } >> "$GITHUB_STEP_SUMMARY"
