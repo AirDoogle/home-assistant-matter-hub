@@ -35,4 +35,12 @@ describe("WebApi", () => {
     const { address } = await startWebApi();
     expect(address.address).toEqual("127.0.0.1");
   });
+
+  it("should keep serving after a request with a malformed URL", async () => {
+    const { url } = await startWebApi();
+    const malformed = await fetch(`${url}/%ff`);
+    expect(malformed.status).toEqual(404);
+    const next = await fetch(`${url}/api/matter/`);
+    expect(next.status).toEqual(200);
+  });
 });
