@@ -8,7 +8,6 @@ import type { EndpointType } from "@matter/main";
 import debounce from "debounce";
 import type { BridgeRegistry } from "../../../services/bridges/bridge-registry.js";
 import type { HomeAssistantStates } from "../../../services/home-assistant/home-assistant-registry.js";
-import { isAllowedDomain } from "../../../services/home-assistant/household-allow-list.js";
 import { HomeAssistantEntityBehavior } from "../../behaviors/home-assistant-entity-behavior.js";
 import { EntityEndpoint } from "../../endpoints/entity-endpoint.js";
 import { createLegacyEndpointType } from "./create-legacy-endpoint-type.js";
@@ -23,11 +22,6 @@ export class LegacyEndpoint extends EntityEndpoint {
     registry: BridgeRegistry,
     entityId: string,
   ): Promise<LegacyEndpoint | undefined> {
-    // This fork exposes only the household's domains, whatever the bridge's
-    // filter matches. See FORK.md.
-    if (!isAllowedDomain(entityId)) {
-      return;
-    }
     const deviceRegistry = registry.deviceOf(entityId);
     const state = registry.initialState(entityId);
     const entity = registry.entity(entityId);

@@ -69,6 +69,5 @@ describe("LegacyEndpoint.create", () => {
       entityId,
     );
     expect(endpoint).toBeUndefined();
-    expect(registry.initialState).not.toHaveBeenCalled();
   });
 });

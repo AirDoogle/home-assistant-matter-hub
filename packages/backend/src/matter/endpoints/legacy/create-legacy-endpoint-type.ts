@@ -3,6 +3,7 @@ import type {
   HomeAssistantEntityInformation,
 } from "@home-assistant-matter-hub/common";
 import type { EndpointType } from "@matter/main";
+import { isAllowedDomain } from "../../../services/home-assistant/household-allow-list.js";
 import type { HomeAssistantEntityBehavior } from "../../behaviors/home-assistant-entity-behavior.js";
 import { AutomationDevice } from "./automation/index.js";
 import { BinarySensorDevice } from "./binary-sensor/index.js";
@@ -27,6 +28,11 @@ import { VacuumDevice } from "./vacuum/index.js";
 export function createLegacyEndpointType(
   entity: HomeAssistantEntityInformation,
 ): EndpointType | undefined {
+  // This fork exposes only the household's domains, whatever the bridge's
+  // filter matches. The other device types stay in the tree, unreachable.
+  if (!isAllowedDomain(entity.entity_id)) {
+    return undefined;
+  }
   const domain = entity.entity_id.split(".")[0] as HomeAssistantDomain;
   const factory = deviceCtrs[domain];
   if (!factory) {

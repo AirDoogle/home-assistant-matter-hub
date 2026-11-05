@@ -11,6 +11,7 @@ import type {
   HomeAssistantRegistry,
   HomeAssistantStates,
 } from "../home-assistant/home-assistant-registry.js";
+import { isAllowedDomain } from "../home-assistant/household-allow-list.js";
 import type { BridgeDataProvider } from "./bridge-data-provider.js";
 import { testMatchers } from "./matcher/matches-entity-filter.js";
 
@@ -58,7 +59,8 @@ export class BridgeRegistry {
         entity,
         device,
       );
-      return !isHidden && matchesFilter;
+      // Only the household's domains, whatever the filter says (FORK.md).
+      return !isHidden && matchesFilter && isAllowedDomain(entity.entity_id);
     });
     this._states = pickBy(
       this.registry.states,
@@ -86,10 +88,9 @@ export class BridgeRegistry {
     entity: HomeAssistantEntityRegistry,
     device: HomeAssistantDeviceRegistry,
   ) {
-    if (
-      filter.include.length > 0 &&
-      !testMatchers(filter.include, device, entity)
-    ) {
+    // An empty include list exposes nothing in this fork (upstream exposed
+    // everything), so a new or half-edited bridge fails closed.
+    if (!testMatchers(filter.include, device, entity)) {
       return false;
     }
     if (

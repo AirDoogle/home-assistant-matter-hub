@@ -150,8 +150,33 @@ describe("createLegacyEndpointType", () => {
     const actual = uniq(endpoints.flatMap((d) => Object.keys(d.state)))
       .filter((key) => !/^\d+$/.test(key))
       .sort();
-    const expected = Object.keys(ClusterId).sort();
-    expect(actual).toEqual(expected);
+    // Upstream asserted that every ClusterId is used. This fork builds only
+    // the household's domains, so check that nothing unknown is used.
+    const known = Object.keys(ClusterId);
+    expect(actual.filter((key) => !known.includes(key))).toEqual([]);
+  });
+
+  it("should build device types only for the household's domains", () => {
+    const allowed = [
+      "light",
+      "switch",
+      "input_boolean",
+      "script",
+      "scene",
+      "automation",
+      "button",
+      "input_button",
+    ];
+    for (const [domain, entities] of Object.entries(testEntities)) {
+      for (const entity of entities) {
+        const type = createLegacyEndpointType(entity);
+        if (allowed.includes(domain)) {
+          expect(type, entity.entity_id).toBeDefined();
+        } else {
+          expect(type, entity.entity_id).toBeUndefined();
+        }
+      }
+    }
   });
 });
 
