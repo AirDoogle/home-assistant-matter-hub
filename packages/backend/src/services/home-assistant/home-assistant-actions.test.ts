@@ -51,7 +51,7 @@ describe("HomeAssistantActions.callAction", () => {
   });
 
   it("should refuse an allowed action aimed at another domain", async () => {
-    await createActions().callAction("homeassistant", "turn_on", undefined, {
+    await createActions().callAction("switch", "turn_on", undefined, {
       entity_id: "lock.front_door",
     });
     expect(callService).not.toHaveBeenCalled();

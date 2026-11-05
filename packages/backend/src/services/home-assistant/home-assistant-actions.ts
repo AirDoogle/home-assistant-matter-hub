@@ -59,7 +59,7 @@ export class HomeAssistantActions extends Service {
     target: HassServiceTarget,
     returnResponse?: boolean,
   ): Promise<T | undefined> {
-    if (!isAllowedAction(`${domain}.${action}`, target)) {
+    if (!isAllowedAction(`${domain}.${action}`, target, data)) {
       this.log.warn(
         `Refused action '${domain}.${action}' for target ${JSON.stringify(target)}: not on this fork's allow-list`,
       );

@@ -12,6 +12,7 @@ import { ClimateDevice } from "./climate/index.js";
 import { CoverDevice } from "./cover/index.js";
 import { FanDevice } from "./fan/index.js";
 import { HumidifierDevice } from "./humidifier/index.js";
+import { InputBooleanDevice } from "./input-boolean/index.js";
 import { InputButtonDevice } from "./input-button/index.js";
 import { LightDevice } from "./light/index.js";
 import { LockDevice } from "./lock/index.js";
@@ -53,7 +54,7 @@ const deviceCtrs: Record<
   sensor: SensorDevice,
   cover: CoverDevice,
   climate: ClimateDevice,
-  input_boolean: SwitchDevice,
+  input_boolean: InputBooleanDevice,
   input_button: InputButtonDevice,
   button: ButtonDevice,
   automation: AutomationDevice,

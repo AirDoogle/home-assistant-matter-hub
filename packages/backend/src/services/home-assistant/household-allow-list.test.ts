@@ -38,10 +38,10 @@ describe("isAllowedAction", () => {
   it.each([
     ["light.turn_on", "light.kitchen"],
     ["light.turn_off", "light.kitchen"],
-    ["homeassistant.turn_on", "switch.lamp"],
-    ["homeassistant.turn_off", "switch.lamp"],
-    ["homeassistant.turn_on", "input_boolean.guest_mode"],
-    ["homeassistant.turn_off", "input_boolean.guest_mode"],
+    ["switch.turn_on", "switch.lamp"],
+    ["switch.turn_off", "switch.lamp"],
+    ["input_boolean.turn_on", "input_boolean.guest_mode"],
+    ["input_boolean.turn_off", "input_boolean.guest_mode"],
     ["script.turn_on", "script.movie_mode"],
     ["scene.turn_on", "scene.evening"],
     ["automation.trigger", "automation.goodnight"],
@@ -58,12 +58,14 @@ describe("isAllowedAction", () => {
     ["cover.open_cover", "cover.garage"],
     ["shell_command.run", "shell_command.run"],
     ["homeassistant.restart", "switch.lamp"],
+    ["homeassistant.turn_on", "switch.lamp"],
+    ["homeassistant.turn_off", "input_boolean.guest_mode"],
     ["script.reload", "script.movie_mode"],
     ["script.turn_off", "script.movie_mode"],
     ["light.toggle", "light.kitchen"],
     // allowed actions aimed at an entity of another domain
-    ["homeassistant.turn_on", "lock.front_door"],
-    ["homeassistant.turn_off", "light.kitchen"],
+    ["switch.turn_on", "input_boolean.guest_mode"],
+    ["input_boolean.turn_off", "switch.lamp"],
     ["light.turn_on", "switch.lamp"],
     ["script.turn_on", "automation.goodnight"],
     ["automation.trigger", "script.movie_mode"],
@@ -76,7 +78,12 @@ describe("isAllowedAction", () => {
 
   it("should refuse when any one of several entities is not allowed", () => {
     expect(
-      isAllowedAction("homeassistant.turn_on", {
+      isAllowedAction("switch.turn_on", {
+        entity_id: ["switch.lamp", "switch.lock_power"],
+      }),
+    ).toBe(true);
+    expect(
+      isAllowedAction("switch.turn_on", {
         entity_id: ["switch.lamp", "lock.front_door"],
       }),
     ).toBe(false);
@@ -103,5 +110,36 @@ describe("isAllowedAction", () => {
         label_id: ["all_lights"],
       }),
     ).toBe(false);
+  });
+
+  it("should allow only the light data keys the light behaviours send", () => {
+    const target = { entity_id: "light.kitchen" };
+    expect(isAllowedAction("light.turn_on", target, {})).toBe(true);
+    expect(
+      isAllowedAction("light.turn_on", target, {
+        brightness: 128,
+        color_temp_kelvin: 2700,
+        hs_color: [30, 60],
+      }),
+    ).toBe(true);
+    expect(isAllowedAction("light.turn_on", target, { flash: "long" })).toBe(
+      false,
+    );
+    expect(isAllowedAction("light.turn_off", target, { transition: 9 })).toBe(
+      false,
+    );
+  });
+
+  it("should refuse data on actions that take none", () => {
+    expect(
+      isAllowedAction(
+        "script.turn_on",
+        { entity_id: "script.movie_mode" },
+        { variables: { x: 1 } },
+      ),
+    ).toBe(false);
+    expect(
+      isAllowedAction("switch.turn_on", { entity_id: "switch.lamp" }, {}),
+    ).toBe(true);
   });
 });
