@@ -67,6 +67,19 @@ describe("HomeAssistantActions.call", () => {
     expect(log.warn).toHaveBeenCalledOnce();
   });
 
+  it("should log, not throw, when Home Assistant rejects a call", async () => {
+    vi.mocked(callService).mockRejectedValueOnce({
+      code: "not_found",
+      message: "Service not found",
+    });
+    createActions().call({ action: "button.press" }, "button.restart");
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(callService).toHaveBeenCalledOnce();
+    expect(log.error).toHaveBeenCalledWith(
+      "Action 'button.press' for button.restart failed: Service not found",
+    );
+  });
+
   it("should pass an allowed action from a Matter command", async () => {
     createActions().call({ action: "scene.turn_on" }, "scene.evening");
     await new Promise((resolve) => setTimeout(resolve, 200));
