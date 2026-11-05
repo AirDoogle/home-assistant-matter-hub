@@ -1,6 +1,7 @@
 import type { HomeAssistantEntityState } from "@home-assistant-matter-hub/common";
 import {
   DestroyedDependencyError,
+  Logger,
   TransactionDestroyedError,
 } from "@matter/general";
 import type { EndpointType } from "@matter/main";
@@ -11,6 +12,8 @@ import { isAllowedDomain } from "../../../services/home-assistant/household-allo
 import { HomeAssistantEntityBehavior } from "../../behaviors/home-assistant-entity-behavior.js";
 import { EntityEndpoint } from "../../endpoints/entity-endpoint.js";
 import { createLegacyEndpointType } from "./create-legacy-endpoint-type.js";
+
+const logger = Logger.get("LegacyEndpoint");
 
 /**
  * @deprecated
@@ -92,14 +95,16 @@ export class LegacyEndpoint extends EntityEndpoint {
       // Suppress errors that are expected during normal shutdown:
       // - TransactionDestroyedError: Transaction context destroyed after shutdown
       // - DestroyedDependencyError: Endpoint was destroyed/deleted
-      // All other errors (crashes, invalid states, etc.) should propagate
       if (
         error instanceof TransactionDestroyedError ||
         error instanceof DestroyedDependencyError
       ) {
         return;
       }
-      throw error;
+      // This runs from a debounced call that nothing awaits, so a rethrow
+      // would be an unhandled rejection that ends the process. Log it; the
+      // next state change tries again.
+      logger.error(`Failed to update ${this.entityId}:`, error);
     }
   }
 }
