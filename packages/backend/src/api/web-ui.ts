@@ -26,8 +26,22 @@ function replaceBase(
       .readFileSync(path.join(dist, "index.html"), "utf8")
       .replace(
         /<!-- BASE -->[\s\S]*<!-- \/BASE -->/,
-        `<base href='${baseUrl}' />`,
+        () => `<base href='${escapeHtml(baseUrl)}' />`,
       );
     res.status(200).contentType("text/html").send(content);
   };
+}
+
+/**
+ * The base URL comes from the X-Ingress-Path request header. Escape it so it
+ * cannot leave the attribute; the replacer function above keeps "$" patterns
+ * in it from being expanded by String.replace.
+ */
+export function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }

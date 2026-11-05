@@ -42,12 +42,13 @@ export class WebApi extends Service {
   protected override async initialize() {
     const api = express.Router();
     api
-      .use(express.json())
+      .use(express.json({ limit: "64kb" }))
       .use(nocache())
       .use("/matter", matterApi(this.bridgeService));
 
     const middlewares: express.Handler[] = [
       this.accessLogger,
+      noSniff,
       supportIngress,
       supportProxyLocation,
     ];
@@ -77,6 +78,7 @@ export class WebApi extends Service {
     }
 
     this.app = express()
+      .disable("x-powered-by")
       .use(...middlewares)
       .use("/api", api)
       .use(webUi(this.props.webUiDist));
@@ -107,4 +109,13 @@ export class WebApi extends Service {
       });
     });
   }
+}
+
+function noSniff(
+  _: express.Request,
+  res: express.Response,
+  next: express.NextFunction,
+) {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  next();
 }
