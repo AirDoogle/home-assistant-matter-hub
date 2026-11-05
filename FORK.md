@@ -142,7 +142,9 @@ an entity the bridge no longer exposes.
 - **Sessions are closed before the bridge stops** (same file), so an Echo
   can drop its session at once instead of holding a stale one. Ported from
   RiDDiX `session-supervisor.ts:72-87` and `735-763`, called before the
-  server is cancelled as at `services/bridges/bridge.ts:347`. A close that
+  server is cancelled as at `services/bridges/bridge.ts:347`, and also in
+  `BridgeServerNode.prepareRuntimeShutdown`, ahead of matter.js's own forced
+  close, so it happens on an add-on restart (SIGTERM) too. A close that
   fails is logged. RiDDiX's forced fallback is not ported: on matter.js 0.16
   a second close returns at once once one has started (`Session.ts:248`,
   `:275`), so it would do nothing.

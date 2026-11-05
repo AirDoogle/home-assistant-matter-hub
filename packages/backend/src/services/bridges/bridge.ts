@@ -20,6 +20,9 @@ export class Bridge {
   private readonly log: Logger;
   readonly server: BridgeServerNode;
   private stopClosingReplacedSessions?: () => void;
+  // Captured when the node starts: looking it up at stop could create a new
+  // SessionManager on a node that is already shutting down.
+  private sessionManager?: SessionManager;
 
   private status: BridgeServerStatus = {
     code: BridgeStatus.Stopped,
@@ -81,8 +84,9 @@ export class Bridge {
       this.endpointManager.startObserving();
       await this.server.start();
       this.stopClosingReplacedSessions?.();
+      this.sessionManager = this.server.env.get(SessionManager);
       this.stopClosingReplacedSessions = closeReplacedSessions(
-        this.server.env.get(SessionManager),
+        this.sessionManager,
         this.log,
       );
       this.status = { code: BridgeStatus.Running };
@@ -97,14 +101,13 @@ export class Bridge {
     code: BridgeStatus = BridgeStatus.Stopped,
     reason = "Manually stopped",
   ) {
-    if (this.stopClosingReplacedSessions) {
-      this.stopClosingReplacedSessions();
-      this.stopClosingReplacedSessions = undefined;
+    this.stopClosingReplacedSessions?.();
+    this.stopClosingReplacedSessions = undefined;
+    const sessionManager = this.sessionManager;
+    this.sessionManager = undefined;
+    if (sessionManager && this.server.lifecycle.isOnline) {
       try {
-        await closeActiveSessions(
-          this.server.env.get(SessionManager),
-          this.log,
-        );
+        await closeActiveSessions(sessionManager, this.log);
       } catch (e) {
         this.log.warn("Failed to close sessions before stopping:", e);
       }
