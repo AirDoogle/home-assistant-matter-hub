@@ -2,13 +2,16 @@ import {
   ClusterId,
   type HomeAssistantEntityInformation,
 } from "@home-assistant-matter-hub/common";
+import { Logger } from "@matter/general";
 import { Behavior, EventEmitter } from "@matter/main";
-
+import { BridgeRegistry } from "../../services/bridges/bridge-registry.js";
 import {
   type HomeAssistantAction,
   HomeAssistantActions,
 } from "../../services/home-assistant/home-assistant-actions.js";
 import { AsyncObservable } from "../../utils/async-observable.js";
+
+const logger = Logger.get("HomeAssistantEntityBehavior");
 
 export class HomeAssistantEntityBehavior extends Behavior {
   static override readonly id = ClusterId.homeAssistantEntity;
@@ -35,6 +38,14 @@ export class HomeAssistantEntityBehavior extends Behavior {
   }
 
   callAction(action: HomeAssistantAction) {
+    // Only for an entity this bridge exposes right now; the action itself is
+    // checked again against the allow-list in HomeAssistantActions.
+    if (!this.env.get(BridgeRegistry).entity(this.entityId)) {
+      logger.warn(
+        `Refused action '${action.action}' for ${this.entityId}: not exposed by this bridge`,
+      );
+      return;
+    }
     const actions = this.env.get(HomeAssistantActions);
     actions.call(action, this.entityId);
   }
