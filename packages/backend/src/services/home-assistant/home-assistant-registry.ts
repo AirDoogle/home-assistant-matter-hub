@@ -4,6 +4,7 @@ import type {
   HomeAssistantEntityRegistry,
   HomeAssistantEntityState,
 } from "@home-assistant-matter-hub/common";
+import { Logger } from "@matter/general";
 import { getStates } from "home-assistant-js-websocket";
 import { fromPairs, keyBy, keys, uniq, values } from "lodash-es";
 import { Service } from "../../core/ioc/service.js";
@@ -12,6 +13,8 @@ import type {
   HomeAssistantClient,
   HomeAssistantClientProps,
 } from "./home-assistant-client.js";
+
+const logger = Logger.get("HomeAssistantRegistry");
 
 export type HomeAssistantDevices = Record<string, HomeAssistantDeviceRegistry>;
 export type HomeAssistantEntities = Record<string, HomeAssistantEntityRegistry>;
@@ -50,12 +53,29 @@ export class HomeAssistantRegistry extends Service {
     this.disableAutoRefresh();
   }
 
-  enableAutoRefresh(onRefresh: () => void) {
+  enableAutoRefresh(onRefresh: () => Promise<void> | void) {
     this.disableAutoRefresh();
 
+    // Nothing awaits this callback, so a reload that fails (Home Assistant
+    // restarting, the websocket reconnecting) or a refresh that throws would
+    // be an unhandled rejection and end the process. Catch and log it, and
+    // skip a tick while the previous one is still running so slow reloads
+    // cannot overlap and overwrite each other. From RiDDiX v2.0.59
+    // services/home-assistant/home-assistant-registry.ts:103-130.
+    let refreshing = false;
     this.autoRefresh = setInterval(async () => {
-      await this.reload();
-      onRefresh();
+      if (refreshing) {
+        return;
+      }
+      refreshing = true;
+      try {
+        await this.reload();
+        await onRefresh();
+      } catch (e) {
+        logger.warn("Failed to refresh registry, will retry next interval:", e);
+      } finally {
+        refreshing = false;
+      }
     }, this.options.refreshInterval * 1000);
   }
 
