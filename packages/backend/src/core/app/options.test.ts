@@ -25,10 +25,9 @@ describe("Options.bridgeService.basicInformation", () => {
   it("should report fixed hardware and software versions", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2031-01-01T00:00:00Z"));
-    const { hardwareVersion, softwareVersion } =
-      options({}).bridgeService.basicInformation;
+    const info = options({}).bridgeService.basicInformation;
     vi.useRealTimers();
-    expect(hardwareVersion).toEqual(2026);
-    expect(softwareVersion).toEqual(2026);
+    expect(info.hardwareVersion).toEqual(2026);
+    expect(info.softwareVersion).toEqual(2026);
   });
 });
