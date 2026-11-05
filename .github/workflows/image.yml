@@ -1,0 +1,133 @@
+name: Image
+
+# Builds the add-on image after CI has passed on a push to douglas, or by
+# hand. linux/arm64 only, on a native arm64 runner (no QEMU).
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [douglas]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: image-${{ github.event.workflow_run.head_sha || github.sha }}
+
+env:
+  IMAGE: ghcr.io/airdoogle/home-assistant-matter-hub-addon
+  # The commit CI passed on (workflow_run), or the dispatched one.
+  SOURCE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+jobs:
+  image:
+    name: Build, test and push linux/arm64
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          persist-credentials: false
+
+      - name: Image tag
+        id: meta
+        run: |
+          version=$(jq -r .version apps/home-assistant-matter-hub/package.json)
+          tag="${version}-dw.${SOURCE_SHA::7}"
+          echo "version=${tag}" >> "$GITHUB_OUTPUT"
+          echo "ref=${IMAGE}:${tag}" >> "$GITHUB_OUTPUT"
+          echo "Image: ${IMAGE}:${tag}"
+
+      # The BuildKit builder is pinned by digest too.
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          driver-opts: image=moby/buildkit:v0.34.2@sha256:92f93f25966c544549b88144406ce8cd9dcdf5df128250711031a4acd9149a8e
+
+      - name: Build for the smoke test
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: apps/home-assistant-matter-hub/addon.Dockerfile
+          platforms: linux/arm64
+          load: true
+          push: false
+          provenance: false
+          sbom: false
+          tags: hamh-smoke:local
+          build-args: |
+            PACKAGE_VERSION=${{ steps.meta.outputs.version }}
+            VCS_REF=${{ env.SOURCE_SHA }}
+
+      - name: Smoke test the image
+        run: |
+          set -eu
+          run() { docker run --rm --entrypoint "$1" hamh-smoke:local "${@:2}"; }
+          run /usr/local/bin/node --version
+          # No package managers in the runtime image.
+          run /bin/sh -c '
+            for b in npm npx corepack pnpm yarn; do
+              if command -v "$b"; then echo "unexpected: $b"; exit 1; fi
+            done
+            test ! -e /usr/local/lib/node_modules
+            id hamh
+            test -x /command/s6-setuidgid
+            test -x /docker-entrypoint.sh'
+          # The bundle loads all its runtime dependencies, as the add-on user.
+          run /command/s6-setuidgid hamh /usr/local/bin/node \
+            /app/apps/home-assistant-matter-hub/dist/backend/cli.js start --help
+
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Same Dockerfile and inputs, so this reuses the cache of the smoke
+      # test build and adds provenance and an SBOM.
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: apps/home-assistant-matter-hub/addon.Dockerfile
+          platforms: linux/arm64
+          push: true
+          provenance: mode=max
+          sbom: generator=docker/buildkit-syft-scanner:1.12.1@sha256:eecdb89c2cd84b80868ea748063edb7225576994dbeac439c6b831092eeb4bff
+          tags: ${{ steps.meta.outputs.ref }}
+          build-args: |
+            PACKAGE_VERSION=${{ steps.meta.outputs.version }}
+            VCS_REF=${{ env.SOURCE_SHA }}
+
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      - name: Summary
+        env:
+          REF: ${{ steps.meta.outputs.ref }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          {
+            echo "### Add-on image"
+            echo
+            echo "- Image: \`${REF}\`"
+            echo "- Digest: \`${DIGEST}\`"
+            echo "- Pinned reference: \`${IMAGE}@${DIGEST}\`"
+            echo "- Source commit: \`${SOURCE_SHA}\`"
+            echo
+            echo "Verify with:"
+            echo
+            echo "    gh attestation verify oci://${IMAGE}@${DIGEST} --owner AirDoogle"
+          } >> "$GITHUB_STEP_SUMMARY"
