@@ -29,7 +29,10 @@ export function closeReplacedSessions(
 
   const schedule = (id: number) => {
     clearTimeout(timers.get(id));
-    timers.set(id, setTimeout(() => check(id), REPLACED_SESSION_CHECK_MS));
+    timers.set(
+      id,
+      setTimeout(() => check(id), REPLACED_SESSION_CHECK_MS),
+    );
   };
 
   const check = (id: number) => {
