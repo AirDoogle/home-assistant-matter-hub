@@ -5,7 +5,10 @@ import { HomeAssistantEntityBehavior } from "../../../behaviors/home-assistant-e
 import { IdentifyServer } from "../../../behaviors/identify-server.js";
 import { OnOffServer } from "../../../behaviors/on-off-server.js";
 
+// A button's state is the time of its last press, which reads as "on".
+// Report it as always off, like input_button.
 const ButtonOnOffServer = OnOffServer({
+  isOn: () => false,
   turnOn: () => ({
     action: "button.press",
   }),

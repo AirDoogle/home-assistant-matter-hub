@@ -29,7 +29,6 @@ const allowedActions: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ["homeassistant.turn_on", new Set(["switch", "input_boolean"])],
   ["homeassistant.turn_off", new Set(["switch", "input_boolean"])],
   ["script.turn_on", new Set(["script"])],
-  ["script.turn_off", new Set(["script"])],
   ["scene.turn_on", new Set(["scene"])],
   ["automation.trigger", new Set(["automation"])],
   ["button.press", new Set(["button"])],

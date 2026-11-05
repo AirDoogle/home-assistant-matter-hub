@@ -43,7 +43,6 @@ describe("isAllowedAction", () => {
     ["homeassistant.turn_on", "input_boolean.guest_mode"],
     ["homeassistant.turn_off", "input_boolean.guest_mode"],
     ["script.turn_on", "script.movie_mode"],
-    ["script.turn_off", "script.movie_mode"],
     ["scene.turn_on", "scene.evening"],
     ["automation.trigger", "automation.goodnight"],
     ["button.press", "button.restart"],
@@ -60,6 +59,7 @@ describe("isAllowedAction", () => {
     ["shell_command.run", "shell_command.run"],
     ["homeassistant.restart", "switch.lamp"],
     ["script.reload", "script.movie_mode"],
+    ["script.turn_off", "script.movie_mode"],
     ["light.toggle", "light.kitchen"],
     // allowed actions aimed at an entity of another domain
     ["homeassistant.turn_on", "lock.front_door"],
