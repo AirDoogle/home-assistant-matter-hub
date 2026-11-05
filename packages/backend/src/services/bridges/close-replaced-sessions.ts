@@ -13,9 +13,12 @@ export const REPLACED_SESSION_QUIET_MS = 5 * 60_000;
  * responding" after some hours.
  *
  * When a peer opens a session, every other session of that peer on the same
- * fabric that holds no subscription is checked every minute and closed once
- * it has been silent for five, so a session that is still priming its first
- * subscription, or still in use, is never cut short.
+ * fabric is checked every minute. It is closed only once it holds no
+ * subscription and has been silent for five minutes, so a session that is
+ * still priming its first subscription, or still in use, is never cut
+ * short. The old session usually still holds its subscription when the new
+ * one opens; matter.js cancels it moments later, when the controller
+ * subscribes on the new session, so the check has to keep watching.
  *
  * Ported from RiDDiX: commit c899c918 (issue #105), as refined by v2.0.59
  * (services/bridges/session-supervisor.ts:415-449 and 626-676,
@@ -38,11 +41,15 @@ export function closeReplacedSessions(
   const check = (id: number) => {
     timers.delete(id);
     const session = [...sessionManager.sessions].find((s) => s.id === id);
-    if (!session || session.isClosing || session.subscriptions.size > 0) {
+    if (!session || session.isClosing) {
       return;
     }
     const quietMs = Date.now() - session.timestamp;
-    if (session.isPeerActive || quietMs < REPLACED_SESSION_QUIET_MS) {
+    if (
+      session.subscriptions.size > 0 ||
+      session.isPeerActive ||
+      quietMs < REPLACED_SESSION_QUIET_MS
+    ) {
       schedule(id);
       return;
     }
@@ -61,11 +68,10 @@ export function closeReplacedSessions(
         session !== added &&
         !session.isClosing &&
         session.peerNodeId === added.peerNodeId &&
-        session.fabric?.fabricIndex === added.fabric?.fabricIndex &&
-        session.subscriptions.size === 0
+        session.fabric?.fabricIndex === added.fabric?.fabricIndex
       ) {
         log.info(
-          `Session ${session.id} (peer ${session.peerNodeId}) was replaced by session ${added.id}; closing it once it goes silent`,
+          `Session ${session.id} (peer ${session.peerNodeId}) was replaced by session ${added.id}; closing it once it has no subscription and goes silent`,
         );
         schedule(session.id);
       }

@@ -102,7 +102,7 @@ describe("closeReplacedSessions", () => {
     expect(old.initiateClose).not.toHaveBeenCalled();
   });
 
-  it("should leave sessions with subscriptions alone", async () => {
+  it("should never close a session while it has a subscription", async () => {
     const old = session(1);
     old.subscriptions.size = 1;
     sessions.add(old);
@@ -110,6 +110,26 @@ describe("closeReplacedSessions", () => {
 
     await vi.advanceTimersByTimeAsync(REPLACED_SESSION_QUIET_MS * 2);
     expect(old.initiateClose).not.toHaveBeenCalled();
+  });
+
+  it("should close it once the subscription it had is cancelled", async () => {
+    // The usual Echo reconnect: the old session still holds its
+    // subscription when the new session opens, and matter.js cancels it
+    // when the controller subscribes on the new one.
+    const old = session(1);
+    old.subscriptions.size = 1;
+    sessions.add(old);
+    sessions.add(session(2));
+
+    await vi.advanceTimersByTimeAsync(REPLACED_SESSION_CHECK_MS);
+    old.subscriptions.size = 0;
+    old.timestamp = Date.now();
+    await vi.advanceTimersByTimeAsync(
+      REPLACED_SESSION_QUIET_MS - REPLACED_SESSION_CHECK_MS,
+    );
+    expect(old.initiateClose).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(REPLACED_SESSION_CHECK_MS);
+    expect(old.initiateClose).toHaveBeenCalledOnce();
   });
 
   it("should leave other peers and other fabrics alone", async () => {
