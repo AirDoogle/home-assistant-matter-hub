@@ -1,3 +1,5 @@
+> **This is a hardened single-household fork. See [FORK.md](FORK.md) for what changed and why.**
+
 # Home-Assistant-Matter-Hub
 
 !["Home-Assistant-Matter-Hub"](./docs/assets/hamh-logo-small.png)
