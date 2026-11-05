@@ -66,7 +66,7 @@ export function matterApi(bridgeService: BridgeService): express.Router {
     res.status(204).send();
   });
 
-  router.get("/bridges/:bridgeId/actions/factory-reset", async (req, res) => {
+  router.post("/bridges/:bridgeId/actions/factory-reset", async (req, res) => {
     const bridgeId = req.params.bridgeId;
     const bridge = bridgeService.bridges.find((b) => b.id === bridgeId);
     if (bridge) {
