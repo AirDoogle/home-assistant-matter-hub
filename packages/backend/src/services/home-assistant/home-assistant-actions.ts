@@ -34,7 +34,13 @@ export class HomeAssistantActions extends Service {
     const entity_id = calls[0].entityId;
     const action = calls[0].action;
     const data = Object.assign({}, ...calls.map((c) => c.data));
-    const [domain, actionName] = action.split(".");
+    const parts = action.split(".");
+    if (parts.length !== 2) {
+      // "light.turn_on.x" would otherwise be checked as light.turn_on.
+      this.log.warn(`Refused malformed action '${action}' for ${entity_id}`);
+      return;
+    }
+    const [domain, actionName] = parts;
     // Nothing awaits this call, so a rejection here (Home Assistant refusing
     // the action, or a lost connection) would be unhandled and end the
     // process. Log it instead.

@@ -13,6 +13,8 @@ const loggerService = { get: () => log } as unknown as LoggerService;
 const connection = {};
 const client = { connection } as unknown as HomeAssistantClient;
 
+const malformed = ["light.turn_on.extra", "light", ""];
+
 function createActions() {
   return new HomeAssistantActions(loggerService, client);
 }
@@ -62,6 +64,13 @@ describe("HomeAssistantActions.callAction", () => {
 describe("HomeAssistantActions.call", () => {
   it("should refuse a disallowed action from a Matter command", async () => {
     createActions().call({ action: "cover.open_cover" }, "cover.garage");
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(callService).not.toHaveBeenCalled();
+    expect(log.warn).toHaveBeenCalledOnce();
+  });
+
+  it.each(malformed)("should refuse malformed action '%s'", async (action) => {
+    createActions().call({ action }, "light.kitchen");
     await new Promise((resolve) => setTimeout(resolve, 200));
     expect(callService).not.toHaveBeenCalled();
     expect(log.warn).toHaveBeenCalledOnce();
