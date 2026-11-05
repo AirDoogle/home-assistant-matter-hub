@@ -44,7 +44,9 @@ jobs:
       - name: Test
         run: pnpm run test
 
-      # Everything except the documentation site, which is not shipped and
-      # whose builder downloads a theme at build time.
+      # The shipped packages only (common, backend, frontend, then the app).
+      # Not the root "build" script: it also builds the documentation site,
+      # which is not shipped and whose builder downloads a theme and runs an
+      # npm install at build time.
       - name: Build
-        run: pnpm -r --filter '!./docs' run build
+        run: pnpm --filter './packages/*' --filter './apps/*' run build
