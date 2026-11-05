@@ -26,11 +26,10 @@ interface FakeSession {
   timestamp: number;
   subscriptions: { size: number };
   initiateClose: Mock<(shutdownLogic?: () => Promise<void>) => Promise<void>>;
-  initiateForceClose: Mock<() => Promise<void>>;
   closeSubscriptions: Mock<(flush?: boolean) => Promise<number>>;
 }
 
-const log = { info: vi.fn() } as unknown as Logger;
+const log = { info: vi.fn(), warn: vi.fn() } as unknown as Logger;
 let sessions: BasicSet<FakeSession>;
 let stop: () => void;
 
@@ -46,7 +45,6 @@ function session(id: number, peer = 1n, fabricIndex = 1): FakeSession {
     initiateClose: vi.fn(async (shutdownLogic?: () => Promise<void>) => {
       await shutdownLogic?.();
     }),
-    initiateForceClose: vi.fn(async () => {}),
     closeSubscriptions: vi.fn(async () => 0),
   };
 }
@@ -59,6 +57,7 @@ beforeEach(() => {
 
 afterEach(() => {
   stop();
+  vi.clearAllMocks();
   vi.useRealTimers();
 });
 
@@ -144,7 +143,7 @@ describe("closeReplacedSessions", () => {
     expect(otherFabric.initiateClose).not.toHaveBeenCalled();
   });
 
-  it("should force the close when a graceful close fails", async () => {
+  it("should log, not throw, when the close fails", async () => {
     const old = session(1);
     old.initiateClose.mockRejectedValueOnce(new Error("peer unreachable"));
     sessions.add(old);
@@ -153,7 +152,10 @@ describe("closeReplacedSessions", () => {
     await vi.advanceTimersByTimeAsync(REPLACED_SESSION_QUIET_MS);
     await vi.advanceTimersByTimeAsync(1);
     expect(old.initiateClose).toHaveBeenCalledOnce();
-    expect(old.initiateForceClose).toHaveBeenCalledOnce();
+    expect(log.warn).toHaveBeenCalledWith(
+      "Closing session 1 failed:",
+      expect.any(Error),
+    );
   });
 
   it("should do nothing once stopped", async () => {
@@ -187,13 +189,16 @@ describe("closeActiveSessions", () => {
     expect(closing.initiateClose).not.toHaveBeenCalled();
   });
 
-  it("should force a session whose graceful close fails", async () => {
+  it("should log, not throw, when a close fails", async () => {
     const a = session(1);
     a.initiateClose.mockRejectedValueOnce(new Error("peer unreachable"));
     sessions.add(a);
 
     await closeActiveSessions(manager(), log);
-    expect(a.initiateForceClose).toHaveBeenCalledOnce();
+    expect(log.warn).toHaveBeenCalledWith(
+      "Closing session 1 failed:",
+      expect.any(Error),
+    );
   });
 
   it("should stop waiting after the timeout", async () => {

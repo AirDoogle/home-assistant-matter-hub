@@ -56,10 +56,7 @@ export function closeReplacedSessions(
     log.info(
       `Closing replaced session ${id} (peer ${session.peerNodeId}, no subscriptions, silent for ${Math.round(quietMs / 1000)}s)`,
     );
-    session
-      .initiateClose()
-      .catch(() => session.initiateForceClose())
-      .catch(() => {});
+    void closeSession(session, log);
   };
 
   const onAdded = (added: NodeSession) => {
@@ -103,12 +100,13 @@ export const SHUTDOWN_SESSION_CLOSE_TIMEOUT_MS = 2_500;
  * Close every active session before the node stops, so each controller is
  * told to drop its CASE session at once instead of holding a stale one,
  * which leaves an Echo showing the bridge as not responding after an
- * add-on restart. Subscriptions are closed (flushed) first; a session whose
- * graceful close fails is force-closed; the wait is capped.
+ * add-on restart. Subscriptions are closed (flushed) first, a failure is
+ * logged, and the wait is capped.
  *
  * Ported from RiDDiX v2.0.59 services/bridges/session-supervisor.ts:72-87
  * (closeGracefully) and 735-763 (closeActiveSessions), called before the
- * server is cancelled as in services/bridges/bridge.ts:347.
+ * server is cancelled as in services/bridges/bridge.ts:347. RiDDiX's forced
+ * fallback is left out: see closeSession.
  */
 export async function closeActiveSessions(
   sessionManager: SessionManager,
@@ -119,13 +117,7 @@ export async function closeActiveSessions(
     if (session.isClosing) {
       continue;
     }
-    closes.push(
-      session
-        .initiateClose(async () => {
-          await session.closeSubscriptions(true);
-        })
-        .catch(() => session.initiateForceClose()),
-    );
+    closes.push(closeSession(session, log));
   }
   if (closes.length === 0) {
     return;
@@ -139,5 +131,23 @@ export async function closeActiveSessions(
     await Promise.race([Promise.allSettled(closes), timeout]);
   } finally {
     clearTimeout(timer);
+  }
+}
+
+/**
+ * Close a session gracefully, flushing and closing its subscriptions first,
+ * and log a failure instead of throwing it. There is no forced fallback: on
+ * matter.js 0.16 the closing flag is set before the shutdown logic runs, so
+ * a second close (initiateForceClose included) returns at once
+ * (Session.ts:247-256, 275-276). matter.js removes a half-closed session
+ * when its exchanges end, or at node shutdown.
+ */
+async function closeSession(session: NodeSession, log: Logger) {
+  try {
+    await session.initiateClose(async () => {
+      await session.closeSubscriptions(true);
+    });
+  } catch (e) {
+    log.warn(`Closing session ${session.id} failed:`, e);
   }
 }

@@ -127,15 +127,19 @@ an entity the bridge no longer exposes.
   matter.js 0.16 leaves a peer's abandoned sessions open), with the two
   refinements v2.0.59 made to that path
   (`services/bridges/session-supervisor.ts:415-449`, `626-676`;
-  `session-rotation.ts:28-57`, `74-110`): a replaced session with no
-  subscription is re-checked every minute and closed only after five minutes
-  without traffic, so a session still priming (#424) or still in use
-  (#287/#398) is never cut short.
+  `session-rotation.ts:28-57`, `74-110`): when a peer opens a session, its
+  other sessions on that fabric are re-checked every minute (the old one
+  usually still holds its subscription at that moment, and matter.js
+  cancels it shortly after), and one is closed only once it has no
+  subscription and five minutes without traffic, so a session still
+  priming (#424) or still in use (#287/#398) is never cut short.
 - **Sessions are closed before the bridge stops** (same file), so an Echo
-  drops its session at once after an add-on restart instead of holding a
-  stale one. Ported from RiDDiX `session-supervisor.ts:72-87` and `735-763`,
-  called before the server is cancelled as at `services/bridges/bridge.ts:347`.
-  On 0.16, `initiateForceClose({ cause })` is `initiateForceClose()`.
+  can drop its session at once instead of holding a stale one. Ported from
+  RiDDiX `session-supervisor.ts:72-87` and `735-763`, called before the
+  server is cancelled as at `services/bridges/bridge.ts:347`. A close that
+  fails is logged. RiDDiX's forced fallback is not ported: on matter.js 0.16
+  a second close returns at once once one has started (`Session.ts:248`,
+  `:275`), so it would do nothing.
 - **Scripts are momentary; buttons always report off.** Upstream reported a
   script ON while it ran and OFF afterwards, so every run sent an Echo an
   on → off report pair, which RiDDiX found can wedge some Echos until they
