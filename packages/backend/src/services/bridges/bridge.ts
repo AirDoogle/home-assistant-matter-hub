@@ -11,7 +11,10 @@ import type {
   BridgeServerStatus,
 } from "./bridge-data-provider.js";
 import type { BridgeEndpointManager } from "./bridge-endpoint-manager.js";
-import { closeReplacedSessions } from "./close-replaced-sessions.js";
+import {
+  closeActiveSessions,
+  closeReplacedSessions,
+} from "./close-replaced-sessions.js";
 
 export class Bridge {
   private readonly log: Logger;
@@ -94,8 +97,18 @@ export class Bridge {
     code: BridgeStatus = BridgeStatus.Stopped,
     reason = "Manually stopped",
   ) {
-    this.stopClosingReplacedSessions?.();
-    this.stopClosingReplacedSessions = undefined;
+    if (this.stopClosingReplacedSessions) {
+      this.stopClosingReplacedSessions();
+      this.stopClosingReplacedSessions = undefined;
+      try {
+        await closeActiveSessions(
+          this.server.env.get(SessionManager),
+          this.log,
+        );
+      } catch (e) {
+        this.log.warn("Failed to close sessions before stopping:", e);
+      }
+    }
     this.endpointManager.stopObserving();
     await this.server.cancel();
     this.status = { code, reason };

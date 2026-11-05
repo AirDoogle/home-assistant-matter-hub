@@ -89,3 +89,49 @@ export function closeReplacedSessions(
     timers.clear();
   };
 }
+
+/** How long shutdown waits for sessions to close before giving up. */
+export const SHUTDOWN_SESSION_CLOSE_TIMEOUT_MS = 2_500;
+
+/**
+ * Close every active session before the node stops, so each controller is
+ * told to drop its CASE session at once instead of holding a stale one,
+ * which leaves an Echo showing the bridge as not responding after an
+ * add-on restart. Subscriptions are closed (flushed) first; a session whose
+ * graceful close fails is force-closed; the wait is capped.
+ *
+ * Ported from RiDDiX v2.0.59 services/bridges/session-supervisor.ts:72-87
+ * (closeGracefully) and 735-763 (closeActiveSessions), called before the
+ * server is cancelled as in services/bridges/bridge.ts:347.
+ */
+export async function closeActiveSessions(
+  sessionManager: SessionManager,
+  log: Logger,
+): Promise<void> {
+  const closes: Promise<void>[] = [];
+  for (const session of [...sessionManager.sessions]) {
+    if (session.isClosing) {
+      continue;
+    }
+    closes.push(
+      session
+        .initiateClose(async () => {
+          await session.closeSubscriptions(true);
+        })
+        .catch(() => session.initiateForceClose()),
+    );
+  }
+  if (closes.length === 0) {
+    return;
+  }
+  log.info(`Closing ${closes.length} active session(s) on shutdown`);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, SHUTDOWN_SESSION_CLOSE_TIMEOUT_MS);
+  });
+  try {
+    await Promise.race([Promise.allSettled(closes), timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
