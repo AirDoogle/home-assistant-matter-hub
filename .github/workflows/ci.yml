@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - douglas
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  verify:
+    name: Lint, test and build
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+    env:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Node from package.json "engines" (22). No dependency cache, so a
+      # poisoned cache entry can never reach this job.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: package.json
+          package-manager-cache: false
+
+      # pnpm at the exact "packageManager" version, through corepack.
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          node --version
+          pnpm --version
+
+      - name: Install dependencies (lockfile only, no dependency scripts)
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Test
+        run: pnpm run test
+
+      # Everything except the documentation site, which is not shipped and
+      # whose builder downloads a theme at build time.
+      - name: Build
+        run: pnpm -r --filter '!./docs' run build
